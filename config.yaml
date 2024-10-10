@@ -1,0 +1,41 @@
+program: train.py
+name: XS model ppo agent batch input norm longer train seq no actor unimix
+method: grid
+metric:
+  goal: maximize
+  name: episode/normalised score
+parameters:
+  BasicSettings.Device:
+    value: cuda:0
+  BasicSettings.Env_name:
+    values:     [
+      ALE/Freeway-v5, ALE/PrivateEye-v5, ALE/UpNDown-v5,
+      ALE/Frostbite-v5, ALE/Hero-v5, ALE/BattleZone-v5, 
+      ALE/DemonAttack-v5, ALE/Breakout-v5, ALE/Pong-v5,  
+      ALE/RoadRunner-v5, ALE/Amidar-v5, ALE/Assault-v5
+    ]
+    
+    # [
+    #   ALE/Alien-v5, ALE/Asterix-v5, ALE/BankHeist-v5, ALE/Boxing-v5, ALE/ChopperCommand-v5,
+    #   ALE/CrazyClimber-v5, ALE/Gopher-v5, ALE/Jamesbond-v5, ALE/Kangaroo-v5, ALE/Krull-v5,
+    #   ALE/KungFuMaster-v5, ALE/MsPacman-v5, ALE/Qbert-v5, ALE/Seaquest-v5
+    # ]S
+
+
+  Models.Agent.Policy:
+    value: PPO
+  n:
+    value: XS model ppo agent batch input norm longer train seq no actor unimix
+
+# early_terminate:
+#   type: hyperband
+#   min_iter: 25000
+#   max:iter: 102400
+#   s: 1
+#   eta: 3
+#   strict: False
+
+command:
+    - python
+    - ${program}
+    - ${args} 

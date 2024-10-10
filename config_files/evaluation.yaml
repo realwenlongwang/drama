@@ -1,0 +1,135 @@
+BasicSettings:
+  ImageSize: 64
+  ImageChannel: 3
+  ReplayBufferOnGPU: True
+  Seed: 3710
+  Env_name: ALE/UpNDown-v5
+  Device: cuda:0
+  Use_amp: True
+  Use_cg: True
+  Compile: True
+
+Evaluate:
+  EpisodeNum: 100
+  SavePath: ./runs/{RUNID}/
+
+JointTrainAgent:
+  SampleMaxSteps: 102400
+  BufferMaxLength: 102400
+  BufferWarmUp: 1024
+  NumEnvs: 1
+  BatchSize: 16
+  BatchLength: 256
+  ImagineBatchSize: 1024
+  ImagineContextLength: 8
+  ImagineBatchLength: 16
+  TrainDynamicsEverySteps: 1
+  TrainDynamicsEpoch: 1
+  TrainAgentEverySteps: 1
+  FreezeWorldModelAfterSteps: 103000
+  SaveEverySteps: 1024
+  Tau: 20
+  ImaginationTau: 20
+  T: 0
+
+Models:
+  WorldModel:
+    Backbone: Mamba2
+    InChannels: 3
+    Act: SiLU
+    CategoricalDim: 32
+    ClassDim: 32
+    HiddenStateDim: 512
+    Optimiser: Laprop
+    LatentDiscreteType: naive
+    Max_grad_norm: 1000
+    Warmup_steps: 1000
+    Adam:
+      LearningRate: 1.0e-4
+    Laprop:
+      LearningRate: 4.0e-5
+      Epsilon: 1.0e-20
+    Encoder:
+      Depth: 16
+      Mults:  [1, 2, 3, 4, 4]
+      Norm: rms
+      Kernel: 5
+      Padding: same
+      InputSize: [3, 64, 64]
+    Decoder:
+      Depth: 16
+      Mults:  [1, 2, 3, 4, 4]
+      Norm: rms
+      Kernel: 5
+      Padding: same
+      FirstStrideOne: True
+      InputSize: [3, 64, 64]
+      FinalLayerSigmoid: True
+    Reward:
+      HiddenUnits: 256
+      LayerNum: 1
+    Termination:
+      HiddenUnits: 256
+      LayerNum: 1      
+    Transformer:
+      FinalFeatureWidth: 4
+      NumLayers: 2
+      NumHeads: 8
+      Dropout: 0.1
+    Mamba:
+      n_layer: 2
+      ssm_cfg:
+        d_state: 16
+    
+
+  Agent:
+    Policy: AC
+    Unimix_ratio: 0
+    AC:
+      NumLayers: 2    
+      Gamma: 0.985
+      Lambda: 0.95
+      EntropyCoef: 3.e-4
+      Max_grad_norm: 100
+      Warmup_steps: 1000
+      Act: SiLU
+      Optimiser: Laprop
+      Adam:
+        LearningRate: 3.0e-5
+        Epsilon: 1.0e-5
+      Laprop:
+        LearningRate: 4.0e-5
+        Epsilon: 1.0e-20
+      Actor:
+        HiddenUnits: 512
+      Critic:
+        HiddenUnits: 512    
+    PPO:
+      NumLayers: 3
+      Gamma: 0.985
+      Lambda: 0.95
+      EpsilonClip: 0.2
+      K_epochs: 3
+      Minibatch: 16384
+      CriticCoef: 1
+      EntropyCoef: 3.e-4
+      KL_threshold: 0.01
+      Max_grad_norm: 0.5
+      Warmup_steps: 1000
+      Act: SiLU
+      Optimiser: Laprop
+      Adam:
+        LearningRate: 3.e-5
+        Epsilon: 1.0e-5
+      Laprop:
+        LearningRate: 4.0e-5
+        Epsilon: 1.0e-20
+      Actor:
+        HiddenUnits: 256
+      Critic:
+        HiddenUnits: 512 # Andrychowicz2020 wider critic network seems better  
+Wandb:
+  Init:
+    Mode: online
+    Project: test
+n: standard
