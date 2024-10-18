@@ -114,15 +114,15 @@ def joint_train_world_model_agent(config, logdir,
     os.makedirs(f"{logdir}/ckpt", exist_ok=True)
 
 
-    vec_env = build_vec_env(config.BasicSettings.Env_name, config.BasicSettings.ImageSize, num_envs=config.JointTrainAgent.NumEnvs, seed=config.BasicSettings.Seed)
+    env = build_single_env(config.BasicSettings.Env_name, config.BasicSettings.ImageSize, seed=config.BasicSettings.Seed)
     print("Current env: " + colorama.Fore.YELLOW + f"{config.BasicSettings.Env_name}" + colorama.Style.RESET_ALL)
 
     atari_benchmark_df = pd.read_csv("atari_performance.csv", index_col='Task', usecols=lambda column: column in ['Task', 'Alien', 'Amidar', 'Assault', 'Asterix', 'BankHeist', 'BattleZone', 'Boxing', 'Breakout', 'ChopperCommand', 'CrazyClimber', 'DemonAttack', 'Freeway', 'Frostbite', 'Gopher', 'Hero', 'Jamesbond', 'Kangaroo', 'Krull', 'KungFuMaster', 'MsPacman', 'Pong', 'PrivateEye', 'Qbert', 'RoadRunner', 'Seaquest', 'UpNDown'])
     atari_pure_name = config.BasicSettings.Env_name.split('/')[-1].split('-')[0]
     game_benchmark_df = atari_benchmark_df.get(atari_pure_name)
     
-    sum_reward = np.zeros(config.JointTrainAgent.NumEnvs)
-    current_obs, current_info = vec_env.reset()
+    sum_reward = 0
+    current_ob, current_info = env.reset()
     context_obs = deque(maxlen=config.JointTrainAgent.RealityContextLength)
     context_action = deque(maxlen=config.JointTrainAgent.RealityContextLength)
 
@@ -134,11 +134,11 @@ def joint_train_world_model_agent(config, logdir,
             agent.eval()
             with torch.no_grad():
                 if len(context_action) == 0:
-                    action = vec_env.action_space.sample()
+                    action = env.action_space.sample()
                 else:
                     context_latent = world_model.encode_obs(torch.cat(list(context_obs), dim=1).to(world_model.device))
-                    model_context_action = np.stack(list(context_action), axis=1)
-                    model_context_action = torch.Tensor(model_context_action).to(world_model.device)
+                    model_context_action = np.stack(list(context_action))
+                    model_context_action = rearrange(torch.Tensor(model_context_action).to(world_model.device), "L -> 1 L")
                     if world_model.model == 'Transformer':
                         prior_flattened_sample, last_dist_feat = world_model.calc_last_dist_feat(context_latent, model_context_action)
                     elif world_model.model == 'Mamba' or world_model.model == 'Mamba2':
@@ -146,35 +146,36 @@ def joint_train_world_model_agent(config, logdir,
                     action = agent.sample_as_env_action(
                         torch.cat([prior_flattened_sample, last_dist_feat], dim=-1),
                         greedy=False
-                    )
+                    )[0]
 
-            context_obs.append(rearrange(torch.Tensor(current_obs).to(world_model.device), "B H W C -> B 1 C H W")/255)
+            context_obs.append(rearrange(torch.Tensor(current_ob).to(world_model.device), "H W C -> 1 1 C H W")/255)
             context_action.append(action)
         else:
-            action = vec_env.action_space.sample()
+            action = env.action_space.sample()
 
-        obs, reward, done, truncated, info = vec_env.step(action)
-        replay_buffer.append(current_obs, action, reward, np.logical_or(done, info["life_loss"]))
+        ob, reward, terminated, truncated, info = env.step(action)
+        replay_buffer.append(current_ob, action, reward, np.logical_or(terminated, info["life_loss"]))
 
         sum_reward += reward
 
-        done_flag = np.logical_or(done, truncated)
-        if done_flag.any():
-            for i in range(config.JointTrainAgent.NumEnvs):
-                if done_flag[i]:
-                    logger.log(f"episode/score", sum_reward[i], global_step=total_steps)
-                    logger.log(f"episode/length", current_info["episode_frame_number"][i]//4, global_step=total_steps)  # framskip=4
-                    logger.log(f"episode/normalised score", (sum_reward[i] - game_benchmark_df['Random'])/(game_benchmark_df['Human'] - game_benchmark_df['Random']), global_step=total_steps)
-                    logger.log("replay_buffer/length", len(replay_buffer), global_step=total_steps)
-                    for algorithm in game_benchmark_df.index[2:]:
-                        denominator = game_benchmark_df[algorithm] - game_benchmark_df['Random']
-                        if denominator != 0:
-                            normalized_score = (sum_reward[i] - game_benchmark_df['Random']) / denominator
-                            logger.log(f"benchmark/normalised {algorithm} score", normalized_score, global_step=total_steps)
-                    
-                    sum_reward[i] = 0
+        done_flag = np.logical_or(terminated, truncated)
+        if done_flag:
+            logger.log(f"episode/score", sum_reward, global_step=total_steps)
+            logger.log(f"episode/length", current_info["episode_frame_number"]//4, global_step=total_steps)  # framskip=4
+            logger.log(f"episode/normalised score", (sum_reward - game_benchmark_df['Random'])/(game_benchmark_df['Human'] - game_benchmark_df['Random']), global_step=total_steps)
+            logger.log("replay_buffer/length", len(replay_buffer), global_step=total_steps)
+            for algorithm in game_benchmark_df.index[2:]:
+                denominator = game_benchmark_df[algorithm] - game_benchmark_df['Random']
+                if denominator != 0:
+                    normalized_score = (sum_reward - game_benchmark_df['Random']) / denominator
+                    logger.log(f"benchmark/normalised {algorithm} score", normalized_score, global_step=total_steps)
+            
+            sum_reward = 0
+            ob, info = env.reset()
+            context_obs.clear()
+            context_action.clear()
 
-        current_obs = obs
+        current_ob = ob
         current_info = info
 
 
