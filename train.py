@@ -359,7 +359,7 @@ if __name__ == "__main__":
         world_model = torch.compile(world_model)
         agent = torch.compile(agent)
     logger = WandbLogger(config=config, project=config.Wandb.Init.Project, mode=config.Wandb.Init.Mode)
-    logdir = logger.run.dir
+    logdir = f"./saved_models/{config.n}/{config.BasicSettings.Env_name}/{logger.run.id}"
 
     # build replay buffer
     replay_buffer = ReplayBuffer(
